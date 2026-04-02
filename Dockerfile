@@ -1,5 +1,5 @@
 # Use the official Bun image
-FROM registry.cern.ch/docker.io/oven/bun:1.1
+FROM oven/bun:1.1
 
 # Install git (required for git http-backend)
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
