@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 
 const REPOS_DIR = join(process.cwd(), "repos");
 const LIVE_DIR = join(process.cwd(), "live");
+const SECRET_TOKEN = process.env.SECRET_TOKEN;
 
 async function ensureRepo(user: string, project: string) {
   const repoPath = join(REPOS_DIR, user, `${project}.git`);
@@ -42,6 +43,17 @@ const server = Bun.serve({
 
     // Handle Git HTTP Backend
     if (path.startsWith("/git/")) {
+      // Secret Token Protection
+      if (SECRET_TOKEN) {
+        const authHeader = req.headers.get("authorization");
+        const urlToken = url.searchParams.get("token");
+        const token = urlToken || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
+
+        if (token !== SECRET_TOKEN) {
+          return new Response("Unauthorized: Invalid Secret Token", { status: 401 });
+        }
+      }
+
       const parts = path.slice(5).split("/");
       if (parts.length < 2) return new Response("Invalid git path", { status: 400 });
 
