@@ -41,7 +41,7 @@ describe("Git Server Logic", () => {
     // But ensureRepo is called via the fetch handler in our integration test.
     // For this unit test, let's just check the side effects of calling the handler.
     
-    const url = `http://${server.hostname}:${server.port}/git/${user}/${project}.git/info/refs?service=git-receive-pack`;
+    const url = `${server.url.origin}/git/${user}/${project}.git/info/refs?service=git-receive-pack`;
     const response = await fetch(url);
     expect(response.status).toBe(200);
 
@@ -65,7 +65,7 @@ describe("Git Server Logic", () => {
     const content = "<h1>Test</h1>";
     await writeFile(indexPath, content);
 
-    const url = `http://${server.hostname}:${server.port}/live/${user}/${project}/index.html`;
+    const url = `${server.url.origin}/live/${user}/${project}/index.html`;
     const response = await fetch(url);
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(content);
@@ -74,13 +74,13 @@ describe("Git Server Logic", () => {
 
 describe("Server Integration", () => {
     test("Server responds to health check", async () => {
-        const response = await fetch(`http://${server.hostname}:${server.port}/`);
+        const response = await fetch(server.url.origin + "/");
         expect(response.status).toBe(200);
         expect(await response.text()).toBe("Git Server Running");
     });
 
     test("Git info/refs returns 200 or 401 depending on token", async () => {
-        const url = `http://${server.hostname}:${server.port}/git/bob/test-repo.git/info/refs?service=git-receive-pack`;
+        const url = `${server.url.origin}/git/bob/test-repo.git/info/refs?service=git-receive-pack`;
         const response = await fetch(url);
         
         // If server has SECRET_TOKEN it should be 401, otherwise 200
