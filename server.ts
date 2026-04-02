@@ -35,9 +35,9 @@ git --work-tree="${livePath}" --git-dir="." checkout -f
   return repoPath;
 }
 
-const server = Bun.serve({
-  port: 3000,
-  async fetch(req) {
+export const serverOptions = {
+  port: process.env.PORT || 3000,
+  async fetch(req: Request) {
     const url = new URL(req.url);
     const path = url.pathname;
 
@@ -133,6 +133,9 @@ const server = Bun.serve({
 
     return new Response("Git Server Running", { status: 200 });
   },
-});
+};
 
-console.log(`Server running at http://localhost:${server.port}`);
+if (import.meta.main) {
+  const server = Bun.serve(serverOptions);
+  console.log(`Server running at http://localhost:${server.port}`);
+}

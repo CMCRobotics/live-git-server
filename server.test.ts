@@ -2,14 +2,13 @@ import { expect, test, describe, beforeAll, afterAll } from "bun:test";
 import { join } from "node:path";
 import { rm, mkdir, writeFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { serverOptions } from "./server";
 
 const TEST_DIR = join(process.cwd(), "test-data");
 const REPOS_DIR = join(TEST_DIR, "repos");
 const LIVE_DIR = join(TEST_DIR, "live");
 
-// Helper to run the server in a way we can test or just test the logic
-// For unit tests, we'll test the core logic. 
-// Integration tests would run the server.
+let server: any;
 
 describe("Git Server Logic", () => {
   beforeAll(async () => {
@@ -18,9 +17,16 @@ describe("Git Server Logic", () => {
     }
     await mkdir(REPOS_DIR, { recursive: true });
     await mkdir(LIVE_DIR, { recursive: true });
+
+    // Start in-process server for testing
+    server = Bun.serve({
+        ...serverOptions,
+        port: 0 // Random port
+    });
   });
 
   afterAll(async () => {
+    server?.stop();
     // Keep it for inspection if needed, or clean up
     // await rm(TEST_DIR, { recursive: true });
   });
@@ -28,29 +34,21 @@ describe("Git Server Logic", () => {
   test("ensureRepo initializes a new bare repository", async () => {
     const user = "testuser";
     const project = "testproj";
-    const repoPath = join(REPOS_DIR, user, `${project}.git`);
-    const livePath = join(LIVE_DIR, user, project);
+    const repoPath = join(process.cwd(), "repos", user, `${project}.git`);
+    const livePath = join(process.cwd(), "live", user, project);
 
-    // We need to import the logic or mock it. 
-    // Since it's in server.ts, let's mock the essential parts or use the logic.
-    // Ideally we would export ensureRepo from server.ts
+    // Initial state might have it from previous manual runs, so we check existence
+    // But ensureRepo is called via the fetch handler in our integration test.
+    // For this unit test, let's just check the side effects of calling the handler.
     
-    // For now, let's re-implement the check or refactor server.ts to export it.
-    expect(existsSync(repoPath)).toBe(false);
-    
-    // Logic from server.ts
-    await mkdir(join(REPOS_DIR, user), { recursive: true });
-    const { spawn } = await import("bun");
-    await spawn(["git", "init", "--bare", repoPath]).exited;
-    await spawn(["git", "-C", repoPath, "config", "http.receivepack", "true"]).exited;
-    
-    const hookPath = join(repoPath, "hooks", "post-receive");
-    const hookContent = `#!/bin/bash\nmkdir -p "${livePath}"\ngit --work-tree="${livePath}" --git-dir="." checkout -f\n`;
-    await writeFile(hookPath, hookContent);
-    await (await import("node:fs/promises")).chmod(hookPath, 0o755);
+    const url = `http://${server.hostname}:${server.port}/git/${user}/${project}.git/info/refs?service=git-receive-pack`;
+    const response = await fetch(url);
+    expect(response.status).toBe(200);
 
     expect(existsSync(repoPath)).toBe(true);
     expect(existsSync(join(repoPath, "config"))).toBe(true);
+    
+    const hookPath = join(repoPath, "hooks", "post-receive");
     expect(existsSync(hookPath)).toBe(true);
     
     const hookStat = await stat(hookPath);
@@ -58,33 +56,31 @@ describe("Git Server Logic", () => {
   });
 
   test("Static file serving logic", async () => {
-    const user = "testuser";
-    const project = "testproj";
-    const livePath = join(LIVE_DIR, user, project);
+    const user = "staticuser";
+    const project = "staticproj";
+    const livePath = join(process.cwd(), "live", user, project);
     await mkdir(livePath, { recursive: true });
     
     const indexPath = join(livePath, "index.html");
     const content = "<h1>Test</h1>";
     await writeFile(indexPath, content);
 
-    const file = Bun.file(indexPath);
-    expect(await file.exists()).toBe(true);
-    expect(await file.text()).toBe(content);
+    const url = `http://${server.hostname}:${server.port}/live/${user}/${project}/index.html`;
+    const response = await fetch(url);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(content);
   });
 });
 
 describe("Server Integration", () => {
-    // Note: To test token protection we'd need to set SECRET_TOKEN env var before starting the server.
-    // Since the server is already running, we test against current state.
-
     test("Server responds to health check", async () => {
-        const response = await fetch("http://localhost:3000/");
+        const response = await fetch(`http://${server.hostname}:${server.port}/`);
         expect(response.status).toBe(200);
         expect(await response.text()).toBe("Git Server Running");
     });
 
     test("Git info/refs returns 200 or 401 depending on token", async () => {
-        const url = "http://localhost:3000/git/bob/test-repo.git/info/refs?service=git-receive-pack";
+        const url = `http://${server.hostname}:${server.port}/git/bob/test-repo.git/info/refs?service=git-receive-pack`;
         const response = await fetch(url);
         
         // If server has SECRET_TOKEN it should be 401, otherwise 200
@@ -96,12 +92,5 @@ describe("Server Integration", () => {
         } else {
             expect(response.status).toBe(200);
         }
-    });
-
-    test("Serving live files", async () => {
-        // Alice's project was pushed in the previous manual test step
-        const response = await fetch("http://localhost:3000/live/alice/my-project/index.html");
-        expect(response.status).toBe(200);
-        expect(await response.text()).toBe("<h1>Hello Git</h1>\n");
     });
 });
