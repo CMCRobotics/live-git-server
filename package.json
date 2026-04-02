@@ -1,0 +1,14 @@
+{
+  "name": "live-git-server",
+  "version": "1.0.0",
+  "description": "A trivial git server to host and visualize live static web pages and resources",
+  "scripts": {
+    "dev": "bun run server.ts",
+    "compile": "bun build server.ts --compile --outfile live-git-server"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "@types/node": "^25.5.0"
+  }
+}
